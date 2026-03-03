@@ -1,5 +1,7 @@
 import numpy as np
+import pandas as pd
 from data.telemetry_processor import TelemetryProcessor
+from data.track_segments import TurnSegment, TrackMap
 
 
 class TelemetryComparator:
@@ -24,6 +26,8 @@ class TelemetryComparator:
         self.aligned_b: dict = None
         self.delta: np.ndarray = None
         self.loss_regions: list[dict] = None
+        self.turns: list[dict] = None
+        self.track_map: TrackMap = None
 
     # ------------------------------------------------------------------
     # Public interface
@@ -90,6 +94,54 @@ class TelemetryComparator:
 
         self.loss_regions = regions
         return regions
+
+    def set_corners(self, corners_df: "pd.DataFrame") -> list[dict]:
+        """
+        Populate self.turns from a FastF1 circuit_info.corners DataFrame.
+
+        Expected columns: Number, Letter, Distance, X, Y
+        Call this before starting the comparison worker; the data is stored
+        on the comparator and used by both the telemetry and track-map plots.
+        """
+        turns = []
+        for _, row in corners_df.iterrows():
+            number = int(row["Number"])
+            raw_letter = row.get("Letter", "")
+            letter = "" if pd.isna(raw_letter) else str(raw_letter).strip()
+            turn: dict = {
+                "turn_number": number,
+                "label": f"T{number}{letter}",
+                "distance": float(row["Distance"]),
+            }
+            if pd.notna(row.get("X")) and pd.notna(row.get("Y")):
+                turn["x"] = float(row["X"])
+                turn["y"] = float(row["Y"])
+            turns.append(turn)
+        self.turns = turns
+        self._build_track_map(turns)
+        return turns
+
+    def _build_track_map(self, turns: list[dict]):
+        """Derive start/end distance bounds for each turn from apex midpoints."""
+        sorted_turns = sorted(turns, key=lambda t: t["distance"])
+        n = len(sorted_turns)
+        segments = []
+        for i, t in enumerate(sorted_turns):
+            apex = t["distance"]
+            if i == 0:
+                gap = sorted_turns[1]["distance"] - apex if n > 1 else 200.0
+                start = max(0.0, apex - gap * 0.5)
+            else:
+                start = (sorted_turns[i - 1]["distance"] + apex) * 0.5
+
+            if i == n - 1:
+                gap = apex - sorted_turns[i - 1]["distance"] if n > 1 else 200.0
+                end = apex + gap * 0.5
+            else:
+                end = (apex + sorted_turns[i + 1]["distance"]) * 0.5
+
+            segments.append(TurnSegment(t["turn_number"], start, end, apex))
+        self.track_map = TrackMap(segments)
 
     def run(self):
         """Convenience method: align → delta → loss regions."""

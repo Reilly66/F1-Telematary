@@ -42,6 +42,12 @@ class SessionLoader:
             return []
         return sorted(laps["LapNumber"].dropna().astype(int).tolist())
 
+    def get_circuit_info(self):
+        """Return the FastF1 CircuitInfo object for the loaded session."""
+        if self._session is None:
+            raise RuntimeError("No session loaded")
+        return self._session.get_circuit_info()
+
     def get_lap(self, driver: str, lap_selection: str = "Fastest"):
         """Return a lap object for the specified driver and lap selection."""
         if self._session is None:

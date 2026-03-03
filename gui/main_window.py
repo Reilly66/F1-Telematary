@@ -166,6 +166,13 @@ class MainWindow(QMainWindow):
         self._last_driver_b = drv_b
         comparator = TelemetryComparator(lap_obj_a, lap_obj_b)
 
+        # Pre-populate corner data from FastF1 circuit info (fast, uses cache)
+        try:
+            circuit_info = self._loader.get_circuit_info()
+            comparator.set_corners(circuit_info.corners)
+        except Exception:
+            pass  # corners are optional; plots degrade gracefully
+
         self.controls.set_status(f"Comparing {drv_a} vs {drv_b}…")
         self.controls.set_loading(True)
 
